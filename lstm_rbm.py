@@ -204,12 +204,28 @@ class LSTM_RBM(object):
         return -b_v_term - hidden_term
 
 
+def run_epoch(sess, model, data, verbose=False):
+    'run the model on the given data'
+    data = np.array(data)
+    epoch_size = len(data) // model.num_steps
+    for time_step in xrange(epoch_size):
+        inputs = data[time_step * model.num_steps :
+                     (time_step + 1) * model.num_steps].reshape([1, model.num_steps])
+        _, losses = sess.run([model.train_op, model.losses],
+                             {
+                                 model.inputs: inputs
+        })
+        if verbose:
+            print ('losses:', losses)
+
+
 class Config():
-    batch_size = 3
+    batch_size = 1
     gibbs_steps = 25
-    num_steps = 21
+    num_steps = 50
     max_grad_norm = 1
     max_len_outputs = 1000
+    max_epochs = 100
 
     learning_rate = 0.1
 
@@ -219,17 +235,26 @@ class Config():
 
 if __name__ == '__main__':
     config = Config()
-    a = LSTM_RBM(config)
-    b = np.random.randint(low=0, high=99, size=[3, 21])
-    print (b)
+    model = LSTM_RBM(config)
+
+    # load data
+    pitches = reader.data2index('./pitches.pkl')
+    config.n_visible = pitches[3]
+    inputs_data = pitches[0]
+    reader.save_data('pitches_i2d.pkl', pitches[1])
+    reader.save_data('pitches_d2i,pkl', pitches[2])
+
+    outputs = []
+
     with tf.Session() as sess:
         sess.run(tf.initialize_all_variables())
-        for i in xrange(100):
-            _, c, l = sess.run([a.train_op, a.costs, a.losses],
-                               {
-                a.inputs: b
-            })
-            print (l)
-        for i in xrange(100):
-            new = sess.run(a.generate)
-            print (new)
+        for i in xrange(config.max_epochs):
+            for data in inputs_data:
+                run_epoch(sess, model, data, verbose=True)
+        for i in xrange(1000):
+            temp = sess.run(model.generate)
+            outputs.append(temp)
+            print (temp)
+
+    outputs_i2d = reader.convert_to_data(outputs, pitches[1])
+    reader.save_data('./generated_pitches.pkl', outputs_i2d)

@@ -23,9 +23,10 @@ def read_data(filename):
 def encode(raw_data):
     data = np.concatenate(raw_data)
     set_data = set(data)
+    len_data = len(set_data)
     index_to_data = {index:data for index,data in enumerate(set_data)}
     data_to_index = {data:index for index,data in enumerate(set_data)}
-    return (index_to_data, data_to_index)
+    return (index_to_data, data_to_index, len_data)
 
 def convert_to_index(data, data_to_index):
     result = []
@@ -44,9 +45,9 @@ def convert_to_data(index, index_to_data):
 
 def data2index(filename):
     raw_data = read_data(filename)
-    index_to_data, data_to_index = encode(raw_data)
+    index_to_data, data_to_index, len_data = encode(raw_data)
     converted_data =  convert_to_index(raw_data, data_to_index)
-    return converted_data, index_to_data, data_to_index
+    return converted_data, index_to_data, data_to_index, len_data
 
 def save_data(filename, val):
     with open(filename, 'wb') as f:
@@ -58,6 +59,10 @@ if __name__ == '__main__':
     #save_data('notes_converted.pkl', notes[0])
     #save_data('notes_i2d.pkl', notes[1])
     #save_data('notes_d2i.pkl', notes[2])
+    #print (notes[3])
     #save_data('pitches_converted.pkl', pitches[0])
     #save_data('pitches_i2d.pkl', pitches[1])
     #save_data('pitches_d2i.pkl', pitches[2])
+    #print (pitches[3])
+    for item in pitches[0]:
+        print (item)
