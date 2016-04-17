@@ -215,7 +215,7 @@ def run_epoch(sess, model, data, verbose=False):
                              {
                                  model.inputs: inputs
         })
-        if verbose:
+        if verbose and time_step == (epoch_size - 1):
             print ('losses:', losses)
 
 
@@ -224,10 +224,10 @@ class Config():
     gibbs_steps = 25
     num_steps = 50
     max_grad_norm = 1
-    max_len_outputs = 1000
-    max_epochs = 100
+    max_len_outputs = 2000
+    max_epochs = 1
 
-    learning_rate = 0.1
+    learning_rate = 0.01
 
     n_visible = 100
     n_hidden = 499
@@ -235,7 +235,6 @@ class Config():
 
 if __name__ == '__main__':
     config = Config()
-    model = LSTM_RBM(config)
 
     # load data
     pitches = reader.data2index('./pitches.pkl')
@@ -245,9 +244,11 @@ if __name__ == '__main__':
     reader.save_data('pitches_d2i,pkl', pitches[2])
 
     outputs = []
-
-    with tf.Session() as sess:
-        sess.run(tf.initialize_all_variables())
+    g = tf.Graph()
+    with tf.Session() as sess, g.as_default(), g.device('/cpu:0'):
+        model = LSTM_RBM(config)
+        #sess.run(tf.initialize_all_variables())
+        model.load_params(sess)
         for i in xrange(config.max_epochs):
             for data in inputs_data:
                 run_epoch(sess, model, data, verbose=True)
@@ -256,5 +257,9 @@ if __name__ == '__main__':
             outputs.append(temp)
             print (temp)
 
-    outputs_i2d = reader.convert_to_data(outputs, pitches[1])
+        model.save_params(sess)
+
+    temp = list(outputs)
+    outputs_i2d = reader.convert_to_data(temp, pitches[1])
+    print ('check point')
     reader.save_data('./generated_pitches.pkl', outputs_i2d)
