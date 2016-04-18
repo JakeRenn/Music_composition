@@ -10,10 +10,7 @@ import cPickle
 
 import tensorflow as tf
 
-a = tf.constant(range(10))
-b = tf.constant(range(10))
+with open('./generated_pitches.pkl', 'rb') as f:
+    data = cPickle.load(f)
 
-c = a * b
-
-with tf.Session() as sess:
-    print sess.run(c)
+print data

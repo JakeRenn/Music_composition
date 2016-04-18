@@ -54,9 +54,12 @@ class LSTM_RBM(object):
         self.max_grad_norm = config.max_grad_norm
         self.max_len_outputs = config.max_len_outputs
 
-        self.learning_rate = tf.Variable(
-            float(config.learning_rate), trainable=False)
-        self.global_steps = tf.Variable(0, trainable=False)
+        self.global_step = tf.Variable(0, trainable=False)
+        self.learning_rate = tf.train.exponential_decay(config.learning_rate,
+                                                        self.global_step,
+                                                        config.decay_steps,
+                                                        config.decay_rate,
+                                                        staircase=True)
 
         self.n_visible = config.n_visible
         self.n_hidden = config.n_hidden
@@ -120,8 +123,11 @@ class LSTM_RBM(object):
         grads, _ = tf.clip_by_global_norm(tf.gradients(self.costs, tvars),
                                           self.max_grad_norm)
         optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
-        self.train_op = optimizer.apply_gradients(zip(grads, tvars))
+        self.train_op = optimizer.apply_gradients(zip(grads, tvars),
+                                                  global_step=self.global_step)
         self.generate = self.get_generate(self.max_len_outputs).next()
+
+        print ('model initialized')
 
     # def initialize_lstm_state(self):
         #self.init_hidden_state = tf.zeros([self.batch_size, self.n_lstm_hidden])
@@ -147,7 +153,7 @@ class LSTM_RBM(object):
         'save params to file'
         saver = tf.train.Saver()
         save_path = saver.save(sess, filename)
-        print ('File is saved in file: %s' % save_path)
+        print ('Prams is saved in file: %s' % save_path)
 
     def load_params(self, sess, filename='./params.ckpt'):
         'if you saver to restore params, you do not have to initialize them beforehand'
@@ -209,14 +215,14 @@ def run_epoch(sess, model, data, verbose=False):
     data = np.array(data)
     epoch_size = len(data) // model.num_steps
     for time_step in xrange(epoch_size):
-        inputs = data[time_step * model.num_steps :
-                     (time_step + 1) * model.num_steps].reshape([1, model.num_steps])
-        _, losses = sess.run([model.train_op, model.losses],
-                             {
-                                 model.inputs: inputs
+        inputs = data[time_step * model.num_steps:
+                      (time_step + 1) * model.num_steps].reshape([1, model.num_steps])
+        _, losses, costs = sess.run([model.train_op, model.losses, model.costs],
+                                    {
+            model.inputs: inputs
         })
         if verbose and time_step == (epoch_size - 1):
-            print ('losses:', losses)
+            print ('losses:', losses, 'costs:', costs)
 
 
 class Config():
@@ -224,42 +230,66 @@ class Config():
     gibbs_steps = 25
     num_steps = 50
     max_grad_norm = 1
-    max_len_outputs = 2000
+    max_len_outputs = 5000
     max_epochs = 1
 
     learning_rate = 0.01
+    decay_steps = 100
+    decay_rate = 0.96
 
     n_visible = 100
-    n_hidden = 499
-    n_lstm_hidden = 249
+    n_hidden = 2000
+    n_lstm_hidden = 200
+
+    new_data = False
+    train = True
 
 if __name__ == '__main__':
     config = Config()
+    model = LSTM_RBM(config)
 
     # load data
-    pitches = reader.data2index('./pitches.pkl')
-    config.n_visible = pitches[3]
-    inputs_data = pitches[0]
-    reader.save_data('pitches_i2d.pkl', pitches[1])
-    reader.save_data('pitches_d2i,pkl', pitches[2])
+    if config.new_data:
+        pitches = reader.data2index('./pitches.pkl')
+        config.n_visible = pitches[3]
+        inputs_data = pitches[0]
+        index_to_data = pitches[1]
+        data_to_index = pitches[2]
+        reader.save_data('pitches_i2d.pkl', pitches[1])
+        reader.save_data('pitches_d2i.pkl', pitches[2])
+        reader.save_data('pitches_len.pkl', pitches[3])
+        print ('information of new data has been saved.')
+    else:
+        data_to_index = reader.load_data('./pitches_d2i.pkl')
+        index_to_data = reader.load_data('./pitches_i2d.pkl')
+        raw_data = reader.load_data('./pitches.pkl')
+        inputs_data = reader.convert_to_index(raw_data, data_to_index)
+        len_pitches = reader.load_data('./pitches_len.pkl')
+        config.n_visible = len_pitches
+        print ('information of needed data has been loaded.')
 
     outputs = []
-    g = tf.Graph()
-    with tf.Session() as sess, g.as_default(), g.device('/cpu:0'):
-        model = LSTM_RBM(config)
-        #sess.run(tf.initialize_all_variables())
-        model.load_params(sess)
-        for i in xrange(config.max_epochs):
-            for data in inputs_data:
-                run_epoch(sess, model, data, verbose=True)
-        for i in xrange(1000):
-            temp = sess.run(model.generate)
-            outputs.append(temp)
-            print (temp)
+    with tf.Session() as sess, tf.device('/cpu:0'):
+        if config.new_data:
+            sess.run(tf.initialize_all_variables())
+            print ('check point: initialize variables')
+        else:
+            model.load_params(sess)
+            print ('check point: load_params')
 
-        model.save_params(sess)
+        if config.train:
+            for i in xrange(config.max_epochs):
+                for data in inputs_data:
+                    run_epoch(sess, model, data, verbose=True)
+                print ('epoch', i + 1)
+            model.save_params(sess)
 
-    temp = list(outputs)
-    outputs_i2d = reader.convert_to_data(temp, pitches[1])
-    print ('check point')
+        if config.generate:
+            for i in xrange(2000):
+                temp = sess.run(model.generate)
+                outputs.append(int(temp))
+                if (i % 100 + 1) == 0:
+                    print ('%d pitches have been generated' % (i + 1))
+
+    outputs_i2d = reader.convert_to_data(temp, index_to_data)
     reader.save_data('./generated_pitches.pkl', outputs_i2d)

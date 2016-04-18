@@ -15,10 +15,11 @@ import cPickle
 
 import numpy as np
 
-def read_data(filename):
+
+def load_data(filename):
     with open(filename, 'rb') as f:
-        raw_data = cPickle.load(f)
-    return raw_data
+        data = cPickle.load(f)
+    return data
 
 def encode(raw_data):
     data = np.concatenate(raw_data)
@@ -44,7 +45,7 @@ def convert_to_data(index, index_to_data):
     return np.array(result)
 
 def data2index(filename):
-    raw_data = read_data(filename)
+    raw_data = load_data(filename)
     index_to_data, data_to_index, len_data = encode(raw_data)
     converted_data =  convert_to_index(raw_data, data_to_index)
     return converted_data, index_to_data, data_to_index, len_data
@@ -52,6 +53,7 @@ def data2index(filename):
 def save_data(filename, val):
     with open(filename, 'wb') as f:
         cPickle.dump(val, f)
+
 
 if __name__ == '__main__':
     notes = data2index('./notes.pkl')
