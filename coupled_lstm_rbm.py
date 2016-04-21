@@ -136,8 +136,8 @@ class LSTM_RBM(object):
         # start to compute the lstm hidden_state recurrently
         hidden_state = self.init_hidden_state
         cell_state = self.init_cell_state
-        self.lstm_outputs = []
-        self.lstm_outputs.append(hidden_state)
+        lstm_outputs = []
+        lstm_outputs.append(hidden_state)
         with tf.variable_scope('lstm'):
             for time_step in xrange(self.num_steps):
                 if time_step > 0:
@@ -145,14 +145,14 @@ class LSTM_RBM(object):
                 (hidden_state, cell_state) = self.lstm.feedforward(
                     vectorized_input[:, time_step, :], hidden_state, cell_state
                 )
-                self.lstm_outputs.append(hidden_state)
+                lstm_outputs.append(hidden_state)
 
         # compute the average costs and losses through num_steps with lstm
         # hidden_state
         self.costs = 0
         self.losses = 0
         for time_step in xrange(self.num_steps):
-            u = self.lstm_outputs[time_step]
+            u = lstm_outputs[time_step]
             self.costs += (tf.reduce_mean(self.free_energy(vectorized_input[:, time_step, :], u)) -
                            tf.reduce_mean(self.free_energy(self.k_steps_gibbs_v(vectorized_input[:, time_step, :], u, self.gibbs_steps), u)))
             self.losses = self.get_loss(vectorized_input[:, time_step, :], u)
@@ -394,9 +394,9 @@ if __name__ == '__main__':
         if config.train:
             for i in xrange(config.max_epochs):
                 temp_indices = get_random_indices(len_inputs_data)
-                for i in temp_indices:
-                    data_pitches = inputs_data_pitches[i]
-                    data_notes = inputs_data_notes[i]
+                for index in temp_indices:
+                    data_pitches = inputs_data_pitches[index]
+                    data_notes = inputs_data_notes[index]
                     run_epoch(
                         sess,
                         model,
