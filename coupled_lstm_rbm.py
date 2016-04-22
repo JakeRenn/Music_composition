@@ -136,8 +136,8 @@ class LSTM_RBM(object):
         # start to compute the lstm hidden_state recurrently
         hidden_state = self.init_hidden_state
         cell_state = self.init_cell_state
-        lstm_outputs = []
-        lstm_outputs.append(hidden_state)
+        self.lstm_outputs = []
+        self.lstm_outputs.append(hidden_state)
         with tf.variable_scope('lstm'):
             for time_step in xrange(self.num_steps):
                 if time_step > 0:
@@ -145,17 +145,17 @@ class LSTM_RBM(object):
                 (hidden_state, cell_state) = self.lstm.feedforward(
                     vectorized_input[:, time_step, :], hidden_state, cell_state
                 )
-                lstm_outputs.append(hidden_state)
+                self.lstm_outputs.append(hidden_state)
 
         # compute the average costs and losses through num_steps with lstm
         # hidden_state
         self.costs = 0
         self.losses = 0
         for time_step in xrange(self.num_steps):
-            u = lstm_outputs[time_step]
+            u = self.lstm_outputs[time_step]
             self.costs += (tf.reduce_mean(self.free_energy(vectorized_input[:, time_step, :], u)) -
                            tf.reduce_mean(self.free_energy(self.k_steps_gibbs_v(vectorized_input[:, time_step, :], u, self.gibbs_steps), u)))
-            self.losses = self.get_loss(vectorized_input[:, time_step, :], u)
+            self.losses += self.get_loss(vectorized_input[:, time_step, :], u)
 
         # build the training of the model and generating of the model
         tvars = tf.trainable_variables()
@@ -169,8 +169,9 @@ class LSTM_RBM(object):
         print (usual_prompt + 'model initialized')
 
     # def initialize_lstm_state(self):
-        #self.init_hidden_state = tf.zeros([self.batch_size, self.n_lstm_hidden])
-        #self.init_cell_state = tf.zeros([self.batch_size, self.n_lstm_hidden])
+        # self.init_hidden_state = tf.zeros([self.batch_size, self.n_lstm_hidden])
+        # self.init_cell_state = tf.zeros([self.batch_size,
+        # self.n_lstm_hidden])
 
     def get_loss(self, inputs, u):
         'the difference between inputs and sampled_inputs'
@@ -253,9 +254,9 @@ class LSTM_RBM(object):
         'this is used to evaluation the stability of the model'
         temp = tf.matmul(inputs, self.w_vh) + self.b_h + \
             tf.matmul(u, self.w_uh)
-        b_v_term = tf.reduce_sum(tf.matmul(inputs,
-                                           (self.b_v + tf.matmul(u, self.w_uv)),
-                                           transpose_b=True), reduction_indices=1)
+        b_v_term = tf.matmul(inputs,
+                             (self.b_v + tf.matmul(u, self.w_uv)),
+                             transpose_b=True)
         hidden_term = tf.reduce_sum(tf.log(1 + tf.exp(temp)),
                                     reduction_indices=1)
         return -b_v_term - hidden_term
@@ -282,7 +283,7 @@ def run_epoch(sess, model, pitches, notes, verbose=False):
             model.inputs_notes: inputs_notes
         })
         if verbose and time_step == (epoch_size - 1):
-            print (usual_prompt  + 'losses: %10f' % losses, '   ',
+            print (usual_prompt + 'losses: %10f' % losses, '   ',
                    'costs: %10f' % costs, '   ',
                    'global_step: %6d' % model.global_step.eval())
 
@@ -296,12 +297,12 @@ def get_random_indices(size):
 class Config():
     'configuration, all hyperparameters are modified here'
     batch_size = 1
-    gibbs_steps = 50
+    gibbs_steps = 25
     num_steps = 50
-    max_grad_norm = 1
+    max_grad_norm = 5
     max_len_outputs = 50000
     generate_num = 20000
-    max_epochs = 1
+    max_epochs = 500
 
     learning_rate = 0.01
     decay_steps = 1000
@@ -310,8 +311,8 @@ class Config():
     n_visible_pitches = 100
     n_visible_notes = 100
     n_visible = 199
-    n_hidden = 5000
-    n_lstm_hidden = 800
+    n_hidden = 2000
+    n_lstm_hidden = 300
 
     new_data = True
     train = True
@@ -404,6 +405,7 @@ if __name__ == '__main__':
                         data_notes,
                         verbose=True)
                 print (usual_prompt + 'epoch', i + 1)
+                print ('-' * 20)
             model.save_params(sess)
 
         # generate data from well trained model
@@ -415,7 +417,9 @@ if __name__ == '__main__':
                 outputs_pitches.append(temp_pitch)
                 outputs_notes.append(temp_note)
                 if ((i + 1) % 100) == 0:
-                    print (usual_prompt + '%d pitches have been generated' % (i + 1))
+                    print (
+                        usual_prompt + '%d pitches have been generated' %
+                        (i + 1))
 
     # convert indices of pitches and notes into corresponding data
     outputs_pitches_i2d = reader.convert_to_data(
