@@ -68,11 +68,11 @@ class LSTM_RBM(object):
 
         # create Variable for global_step and exponential_decay_learning_rate
         self.global_step = tf.Variable(0, trainable=False)
-        self.learning_rate = tf.train.exponential_decay(config.learning_rate,
-                                                        self.global_step,
-                                                        config.decay_steps,
-                                                        config.decay_rate,
-                                                        staircase=True)
+        #self.learning_rate = tf.train.exponential_decay(config.learning_rate,
+                                                        #self.global_step,
+                                                        #config.decay_steps,
+                                                        #config.decay_rate,
+                                                        #staircase=True)
 
         # where n_visible == n_visible_pitches + n_visible_notes
         self.n_visible = config.n_visible
@@ -161,7 +161,8 @@ class LSTM_RBM(object):
         tvars = tf.trainable_variables()
         grads, _ = tf.clip_by_global_norm(tf.gradients(self.costs, tvars),
                                           self.max_grad_norm)
-        optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
+        #optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
+        optimizer = tf.train.AdamOptimizer()
         self.train_op = optimizer.apply_gradients(zip(grads, tvars),
                                                   global_step=self.global_step)
         self.generate = self.get_generate(self.max_len_outputs).next()
