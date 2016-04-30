@@ -80,7 +80,8 @@ class LSTM_RBM(object):
         self.n_visible_pitches = config.n_visible_pitches
         self.n_visible_notes = config.n_visible_notes
         if self.n_visible == self.n_visible_pitches + self.n_visible_notes:
-            print (usual_prompt + 'n_visible is configured correctly.')
+            #print (usual_prompt + 'n_visible is configured correctly.')
+            print (usual_prompt + 'Continue.')
         else:
             raise Exception(
                 exception_prompt +
@@ -119,8 +120,7 @@ class LSTM_RBM(object):
         # create a lstm instance and define the initial hidden_state and
         # cell_state
         self.lstm = lstm.LSTM(self.n_visible, self.n_lstm_hidden)
-        self.init_hidden_state = tf.zeros(
-            [self.batch_size, self.n_lstm_hidden])
+        self.init_hidden_state = tf.zeros( [self.batch_size, self.n_lstm_hidden])
         self.init_cell_state = tf.zeros([self.batch_size, self.n_lstm_hidden])
 
         # self.params = [self.w_vh, self.w_uh, self.w_uv,
@@ -156,7 +156,7 @@ class LSTM_RBM(object):
         for time_step in xrange(self.num_steps):
             u = self.lstm_outputs[time_step]
             self.costs += (tf.reduce_mean(self.free_energy(vectorized_input[:, time_step, :], u)) -
-                           tf.reduce_mean(self.free_energy(self.k_steps_gibbs_v(vectorized_input[:, time_step, :], u, self.gibbs_steps), u)))
+                           tf.reduce_mean(self.free_energy(self.mean_v(vectorized_input[:, time_step, :], u), u)))
             self.losses += self.get_loss(vectorized_input[:, time_step, :], u)
 
         # build the training of the model and generating of the model
@@ -169,7 +169,7 @@ class LSTM_RBM(object):
                                                   global_step=self.global_step)
         self.generate = self.get_generate(self.max_len_outputs).next()
 
-        print (usual_prompt + 'model initialized')
+        print (usual_prompt + 'model has been built.')
 
     # def initialize_lstm_state(self):
         # self.init_hidden_state = tf.zeros([self.batch_size, self.n_lstm_hidden])
@@ -182,26 +182,37 @@ class LSTM_RBM(object):
 
     def get_generate(self, len_outputs):
         'generate the pitch and note iteratively'
-        hidden_state = tf.random_normal([self.batch_size,
+        init_hidden_state = tf.random_normal([self.batch_size,
                                          self.n_lstm_hidden],
                                         stddev=1 / math.sqrt(self.n_lstm_hidden))
-        cell_state = tf.random_normal([self.batch_size,
+        init_cell_state = tf.random_normal([self.batch_size,
                                        self.n_lstm_hidden],
                                       stddev=1 / math.sqrt(self.n_lstm_hidden))
+        inputs_pitches = tf.reshape(vectorize(29, self.n_visible_pitches),
+                                   [self.batch_size, self.n_visible_pitches])
+        inputs_notes = tf.reshape(vectorize(0, self.n_visible_notes),
+                                  [self.batch_size, self.n_visible_notes])
+        with tf.variable_scope('lstm'):
+            tf.get_variable_scope().reuse_variables()
+            inputs = tf.concat(1, [inputs_pitches, inputs_notes])
+            (hidden_state, cell_state) = self.lstm.feedforward(inputs,
+                                                              init_hidden_state,
+                                                              init_cell_state)
+
         with tf.variable_scope('lstm'):
             for time_step in xrange(len_outputs):
                 tf.get_variable_scope().reuse_variables()
-            inputs = self.mean_v(tf.random_normal([self.batch_size,
-                                                   self.n_visible],
-                                                 stddev = 1/math.sqrt(self.n_visible)),
+                inputs = self.mean_v(tf.random_normal([self.batch_size,
+                                                       self.n_visible],
+                                                       stddev = 1/math.sqrt(self.n_visible)),
                                  hidden_state)
-            (hidden_state, cell_state) = self.lstm.feedforward(inputs,
+                (hidden_state, cell_state) = self.lstm.feedforward(inputs,
                                                                hidden_state,
                                                                cell_state)
-            inputs_pitches = inputs[:, :self.n_visible_pitches]
-            inputs_notes = inputs[:, :self.n_visible_notes]
+                inputs_pitches = inputs[:, :self.n_visible_pitches]
+                inputs_notes = inputs[:, :self.n_visible_notes]
             #yield (tf.argmax(inputs_pitches, 1), tf.argmax(inputs_notes, 1))
-            yield inputs_pitches, inputs_notes
+                yield inputs_pitches, inputs_notes
 
     def save_params(self, sess, filename='./params.ckpt'):
         'save params to file'
@@ -279,25 +290,36 @@ def run_epoch(sess, model, pitches, notes, verbose=False):
     if len(pitches) == len(notes):
         epoch_size = len(pitches) // model.num_steps
         start_len = len(pitches) % model.num_steps
-        start = random.randint(0, start_len - 1)
+        if start_len >= 0:
+            start = random.randint(0, start_len)
+        else:
+            raise ValueError(exception_prompt + 'function run_epoch->start error.')
     else:
         raise ValueError(
             exception_prompt + '''length of pitches is not equal to length of notes,
             please make sure they are equal to each other.''')
+    costs = 0
+    losses = 0
+    numbers = 0
     for time_step in xrange(epoch_size):
         inputs_pitches = pitches[start + time_step * model.num_steps:
                                  start + (time_step + 1) * model.num_steps].reshape([1, model.num_steps])
         inputs_notes = notes[start + time_step * model.num_steps:
                              start + (time_step + 1) * model.num_steps].reshape([1, model.num_steps])
-        _, losses, costs = sess.run([model.train_op, model.losses, model.costs],
+        _, loss, cost = sess.run([model.train_op, model.losses, model.costs],
                                     {
             model.inputs_pitches: inputs_pitches,
             model.inputs_notes: inputs_notes
         })
-        if verbose and time_step == (epoch_size - 1):
-            print (usual_prompt + 'losses: %10f' % losses, '   ',
-                   'costs: %10f' % costs, '   ',
-                   'global_step: %6d' % model.global_step.eval())
+        costs += cost
+        losses += loss
+        numbers += 1
+    if verbose:
+        print (usual_prompt + 'losses: %10f' % losses, '   ',
+                'costs: %10f' % costs, '   ',
+                'global_step: %6d' % model.global_step.eval())
+        print (usual_prompt + numbers, "* 50 notes have beend processed.")
+    return costs, losses
 
 
 def get_random_indices(size):
@@ -313,7 +335,7 @@ class Config():
     num_steps = 50
     max_grad_norm = 5
     max_len_outputs = 200000
-    generate_num = 50000
+    generate_num = 20000
     max_epochs = 300
 
     #learning_rate = 0.01
@@ -329,6 +351,7 @@ class Config():
 
     new_data = True
     train = True
+
     generate = True
 
 
@@ -394,10 +417,10 @@ if __name__ == '__main__':
     with tf.Session() as sess, tf.device('/cpu:0'):
         if config.new_data:
             sess.run(tf.initialize_all_variables())
-            print (usual_prompt + 'variables have been initialized.')
+            print (usual_prompt + 'Variables have been initialized.')
         else:
             model.load_params(sess)
-            print (usual_prompt + 'params have been loaded.')
+            print (usual_prompt + 'Params have been loaded.')
 
         if len(inputs_data_pitches) == len(inputs_data_notes):
             len_inputs_data = len(inputs_data_pitches)
@@ -408,18 +431,24 @@ if __name__ == '__main__':
         if config.train:
             for i in xrange(config.max_epochs):
                 temp_indices = get_random_indices(len_inputs_data)
+                costs = 0
+                losses = 0
                 for index in temp_indices:
                     data_pitches = inputs_data_pitches[index]
                     data_notes = inputs_data_notes[index]
-                    run_epoch(
-                        sess,
-                        model,
-                        data_pitches,
-                        data_notes,
-                        verbose=True)
-                print (usual_prompt + 'epoch', i + 1)
+                    cost, loss, number = run_epoch( sess,
+                                                    model,
+                                                    data_pitches,
+                                                    data_notes,
+                                                    verbose=True)
+                    costs += cost
+                    losses += loss
                 print ('-' * 20)
-                if (i + 1) % 50 == 0:
+                print (usual_prompt + 'epoch', i + 1)
+                print (usual_prompt + 'total losses', losses)
+                print (usual_prompt + 'total costs', costs)
+                print ('-' * 20)
+                if (i + 1) % 30 == 0:
                     model.save_params(sess)
             model.save_params(sess)
 
@@ -447,11 +476,11 @@ if __name__ == '__main__':
                         usual_prompt + '%d pitches have been generated' %
                         (i + 1))
 
-    # convert indices of pitches and notes into corresponding data
-    outputs_pitches_i2d = reader.convert_to_data(
-        outputs_pitches, index_to_data_pitches)
-    outputs_notes_i2d = reader.convert_to_data(
-        outputs_notes, index_to_data_notes)
-    # save generated data
-    reader.save_data('./generated_pitches.pkl', outputs_pitches_i2d)
-    reader.save_data('./generated_notes.pkl', outputs_notes_i2d)
+            # convert indices of pitches and notes into corresponding data
+            outputs_pitches_i2d = reader.convert_to_data(
+                outputs_pitches, index_to_data_pitches)
+            outputs_notes_i2d = reader.convert_to_data(
+                outputs_notes, index_to_data_notes)
+            # save generated data
+            reader.save_data('./generated_pitches.pkl', outputs_pitches_i2d)
+            reader.save_data('./generated_notes.pkl', outputs_notes_i2d)
