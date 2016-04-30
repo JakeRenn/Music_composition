@@ -318,7 +318,8 @@ def run_epoch(sess, model, pitches, notes, verbose=False):
         print (usual_prompt + 'losses: %10f' % losses, '   ',
                 'costs: %10f' % costs, '   ',
                 'global_step: %6d' % model.global_step.eval())
-        print (usual_prompt + numbers, "* 50 notes have beend processed.")
+        print (usual_prompt, numbers, "* 50 notes have beend processed.")
+        print ("start:", start)
     return costs, losses
 
 
@@ -436,11 +437,11 @@ if __name__ == '__main__':
                 for index in temp_indices:
                     data_pitches = inputs_data_pitches[index]
                     data_notes = inputs_data_notes[index]
-                    cost, loss, number = run_epoch( sess,
-                                                    model,
-                                                    data_pitches,
-                                                    data_notes,
-                                                    verbose=True)
+                    cost, loss = run_epoch( sess,
+                                            model,
+                                            data_pitches,
+                                            data_notes,
+                                            verbose=True)
                     costs += cost
                     losses += loss
                 print ('-' * 20)
