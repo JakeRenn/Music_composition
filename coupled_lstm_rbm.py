@@ -120,7 +120,8 @@ class LSTM_RBM(object):
         # create a lstm instance and define the initial hidden_state and
         # cell_state
         self.lstm = lstm.LSTM(self.n_visible, self.n_lstm_hidden)
-        self.init_hidden_state = tf.zeros( [self.batch_size, self.n_lstm_hidden])
+        self.init_hidden_state = tf.zeros(
+            [self.batch_size, self.n_lstm_hidden])
         self.init_cell_state = tf.zeros([self.batch_size, self.n_lstm_hidden])
 
         # self.params = [self.w_vh, self.w_uh, self.w_uv,
@@ -144,10 +145,11 @@ class LSTM_RBM(object):
                 if time_step > 0:
                     tf.get_variable_scope().reuse_variables()
                 (hidden_state, cell_state) = self.lstm.feedforward(
-                    vectorized_input[:, time_step, :], hidden_state, cell_state
-                )
-                hidden_state = tf.nn.dropout(hidden_state, self.keep_prob)
-                self.lstm_outputs.append(hidden_state)
+                    vectorized_input[:, time_step, :],
+                    hidden_state, cell_state)
+                dropout_hidden_state = tf.nn.dropout(
+                    hidden_state, self.keep_prob)
+                self.lstm_outputs.append(dropout_hidden_state)
 
         # compute the average costs and losses through num_steps with lstm
         # hidden_state
@@ -156,7 +158,8 @@ class LSTM_RBM(object):
         for time_step in xrange(self.num_steps):
             u = self.lstm_outputs[time_step]
             self.costs += (tf.reduce_mean(self.free_energy(vectorized_input[:, time_step, :], u)) -
-                           tf.reduce_mean(self.free_energy(self.mean_v(vectorized_input[:, time_step, :], u), u)))
+                           #tf.reduce_mean(self.free_energy(self.mean_v(vectorized_input[:, time_step, :], u), u)))
+                           tf.reduce_mean(self.free_energy(self.k_steps_gibbs_v(vectorized_input[:, time_step, :], u, self.gibbs_steps), u)))
             self.losses += self.get_loss(vectorized_input[:, time_step, :], u)
 
         # build the training of the model and generating of the model
@@ -183,35 +186,32 @@ class LSTM_RBM(object):
     def get_generate(self, len_outputs):
         'generate the pitch and note iteratively'
         init_hidden_state = tf.random_normal([self.batch_size,
-                                         self.n_lstm_hidden],
-                                        stddev=1 / math.sqrt(self.n_lstm_hidden))
+                                              self.n_lstm_hidden],
+                                             stddev=1 / math.sqrt(self.n_lstm_hidden))
         init_cell_state = tf.random_normal([self.batch_size,
-                                       self.n_lstm_hidden],
-                                      stddev=1 / math.sqrt(self.n_lstm_hidden))
+                                            self.n_lstm_hidden],
+                                           stddev=1 / math.sqrt(self.n_lstm_hidden))
         inputs_pitches = tf.reshape(vectorize(29, self.n_visible_pitches),
-                                   [self.batch_size, self.n_visible_pitches])
+                                    [self.batch_size, self.n_visible_pitches])
         inputs_notes = tf.reshape(vectorize(0, self.n_visible_notes),
                                   [self.batch_size, self.n_visible_notes])
         with tf.variable_scope('lstm'):
             tf.get_variable_scope().reuse_variables()
             inputs = tf.concat(1, [inputs_pitches, inputs_notes])
             (hidden_state, cell_state) = self.lstm.feedforward(inputs,
-                                                              init_hidden_state,
-                                                              init_cell_state)
+                                                               init_hidden_state,
+                                                               init_cell_state)
 
         with tf.variable_scope('lstm'):
             for time_step in xrange(len_outputs):
                 tf.get_variable_scope().reuse_variables()
-                inputs = self.mean_v(tf.random_normal([self.batch_size,
-                                                       self.n_visible],
-                                                       stddev = 1/math.sqrt(self.n_visible)),
-                                 hidden_state)
+                inputs = self.mean_v(inputs, hidden_state)
                 (hidden_state, cell_state) = self.lstm.feedforward(inputs,
-                                                               hidden_state,
-                                                               cell_state)
+                                                                   hidden_state,
+                                                                   cell_state)
                 inputs_pitches = inputs[:, :self.n_visible_pitches]
-                inputs_notes = inputs[:, :self.n_visible_notes]
-            #yield (tf.argmax(inputs_pitches, 1), tf.argmax(inputs_notes, 1))
+                inputs_notes = inputs[:, self.n_visible_pitches:]
+                # yield (tf.argmax(inputs_pitches, 1), tf.argmax(inputs_notes, 1))
                 yield inputs_pitches, inputs_notes
 
     def save_params(self, sess, filename='./params.ckpt'):
@@ -293,7 +293,9 @@ def run_epoch(sess, model, pitches, notes, verbose=False):
         if start_len >= 0:
             start = random.randint(0, start_len)
         else:
-            raise ValueError(exception_prompt + 'function run_epoch->start error.')
+            raise ValueError(
+                exception_prompt +
+                'function run_epoch->start error.')
     else:
         raise ValueError(
             exception_prompt + '''length of pitches is not equal to length of notes,
@@ -307,7 +309,7 @@ def run_epoch(sess, model, pitches, notes, verbose=False):
         inputs_notes = notes[start + time_step * model.num_steps:
                              start + (time_step + 1) * model.num_steps].reshape([1, model.num_steps])
         _, loss, cost = sess.run([model.train_op, model.losses, model.costs],
-                                    {
+                                 {
             model.inputs_pitches: inputs_pitches,
             model.inputs_notes: inputs_notes
         })
@@ -316,10 +318,9 @@ def run_epoch(sess, model, pitches, notes, verbose=False):
         numbers += 1
     if verbose:
         print (usual_prompt + 'losses: %10f' % losses, '   ',
-                'costs: %10f' % costs, '   ',
-                'global_step: %6d' % model.global_step.eval())
+               'costs: %10f' % costs, '   ',
+               'global_step: %6d' % model.global_step.eval())
         print (usual_prompt, numbers, "* 50 notes have beend processed.")
-        print ("start:", start)
     return costs, losses
 
 
@@ -337,7 +338,7 @@ class Config():
     max_grad_norm = 5
     max_len_outputs = 200000
     generate_num = 20000
-    max_epochs = 300
+    max_epochs = 3000
 
     #learning_rate = 0.01
     #decay_steps = 1000
@@ -347,8 +348,8 @@ class Config():
     n_visible_pitches = 100
     n_visible_notes = 100
     n_visible = 199
-    n_hidden = 800
-    n_lstm_hidden = 500
+    n_hidden = 500
+    n_lstm_hidden = 200
 
     new_data = True
     train = True
@@ -410,7 +411,8 @@ if __name__ == '__main__':
 
         print (usual_prompt + 'information of needed data has been loaded.')
 
-    model = LSTM_RBM(config)
+    with tf.device('/cpu:0'):
+        model = LSTM_RBM(config)
 
     outputs_pitches = []
     outputs_notes = []
@@ -437,11 +439,11 @@ if __name__ == '__main__':
                 for index in temp_indices:
                     data_pitches = inputs_data_pitches[index]
                     data_notes = inputs_data_notes[index]
-                    cost, loss = run_epoch( sess,
-                                            model,
-                                            data_pitches,
-                                            data_notes,
-                                            verbose=True)
+                    cost, loss = run_epoch(sess,
+                                           model,
+                                           data_pitches,
+                                           data_notes,
+                                           verbose=False)
                     costs += cost
                     losses += loss
                 print ('-' * 20)
@@ -461,15 +463,21 @@ if __name__ == '__main__':
                 temp_note = temp[1]
                 #print (p_pitch.shape, config.n_visible_pitches)
                 #print (p_note.shape, config.n_visible_notes)
-                sum_pitch = float(np.sum(temp_pitch, axis = 1))
-                sum_note = float(np.sum(temp_note, axis = 1))
-                p_pitch = temp_pitch.reshape([config.n_visible_pitches]) / sum_pitch
+                sum_pitch = float(np.sum(temp_pitch, axis=1))
+                sum_note = float(np.sum(temp_note, axis=1))
+                p_pitch = temp_pitch.reshape(
+                    [config.n_visible_pitches]) / sum_pitch
                 p_note = temp_note.reshape([config.n_visible_notes]) / sum_note
-                pitch = int(np.random.choice(config.n_visible_pitches, 1, p = p_pitch))
-                note = int(np.random.choice(config.n_visible_notes, 1, p = p_note))
-                print (pitch)
-                print (note)
-                lala = raw_input('haha')
+                pitch = int(
+                    np.random.choice(
+                        config.n_visible_pitches,
+                        1,
+                        p=p_pitch))
+                note = int(
+                    np.random.choice(
+                        config.n_visible_notes,
+                        1,
+                        p=p_note))
                 outputs_pitches.append(pitch)
                 outputs_notes.append(note)
                 if ((i + 1) % 100) == 0:
