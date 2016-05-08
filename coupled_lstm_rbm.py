@@ -185,23 +185,31 @@ class LSTM_RBM(object):
 
     def get_generate(self, len_outputs):
         'generate the pitch and note iteratively'
-        init_hidden_state = tf.random_normal([self.batch_size,
-                                              self.n_lstm_hidden],
-                                             stddev=1 / math.sqrt(self.n_lstm_hidden))
-        init_cell_state = tf.random_normal([self.batch_size,
-                                            self.n_lstm_hidden],
-                                           stddev=1 / math.sqrt(self.n_lstm_hidden))
-        inputs_pitches = tf.reshape(vectorize(29, self.n_visible_pitches),
-                                    [self.batch_size, self.n_visible_pitches])
-        inputs_notes = tf.reshape(vectorize(0, self.n_visible_notes),
-                                  [self.batch_size, self.n_visible_notes])
-        with tf.variable_scope('lstm'):
-            tf.get_variable_scope().reuse_variables()
-            inputs = tf.concat(1, [inputs_pitches, inputs_notes])
-            (hidden_state, cell_state) = self.lstm.feedforward(inputs,
-                                                               init_hidden_state,
-                                                               init_cell_state)
+        #init_hidden_state = tf.random_normal([self.batch_size,
+                                              #self.n_lstm_hidden],
+                                             #stddev=1 / math.sqrt(self.n_lstm_hidden))
+        #init_cell_state = tf.random_normal([self.batch_size,
+                                            #self.n_lstm_hidden],
+                                           #stddev=1 / math.sqrt(self.n_lstm_hidden))
+        #inputs_pitches = tf.reshape(vectorize(29, self.n_visible_pitches),
+                                    #[self.batch_size, self.n_visible_pitches])
+        #inputs_notes = tf.reshape(vectorize(0, self.n_visible_notes),
+                                  #[self.batch_size, self.n_visible_notes])
+        #with tf.variable_scope('lstm'):
+            #tf.get_variable_scope().reuse_variables()
+            #inputs = tf.concat(1, [inputs_pitches, inputs_notes])
+            #(hidden_state, cell_state) = self.lstm.feedforward(inputs,
+                                                               #init_hidden_state,
+                                                               #init_cell_state)
 
+        np_pitches = np.zeros([self.batch_size, self.n_visible_pitches], dtype = 'float32')
+        np_notes = np.zeros([self.batch_size, self.n_visible_notes], dtype = 'float32')
+        np_pitches[:, 29] = 1
+        np_notes[:, 1] = 1
+        np_inputs = np.concatenate((np_pitches, np_notes), axis = 1)
+        inputs = tf.constant(np_inputs, dtype = tf.float32, shape = [self.batch_size, self.n_visible])
+        hidden_state = self.init_hidden_state
+        cell_state = self.init_cell_state
         with tf.variable_scope('lstm'):
             for time_step in xrange(len_outputs):
                 tf.get_variable_scope().reuse_variables()
@@ -333,11 +341,11 @@ def get_random_indices(size):
 class Config():
     'configuration, all hyperparameters are modified here'
     batch_size = 1
-    gibbs_steps = 5
+    gibbs_steps = 50
     num_steps = 50
     max_grad_norm = 5
     max_len_outputs = 200000
-    generate_num = 20000
+    generate_num = 30000
     max_epochs = 3000
 
     #learning_rate = 0.01
@@ -351,8 +359,8 @@ class Config():
     n_hidden = 500
     n_lstm_hidden = 200
 
-    new_data = True
-    train = True
+    new_data = False
+    train = False
 
     generate = True
 
