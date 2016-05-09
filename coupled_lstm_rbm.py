@@ -160,7 +160,7 @@ class LSTM_RBM(object):
             v_sampled = self.gibbs_sample_v(vectorized_input[:, time_step, :], u)
             self.costs += (tf.reduce_mean(self.free_energy(vectorized_input[:, time_step, :], u)) -
                            #tf.reduce_mean(self.free_energy(self.mean_v(vectorized_input[:, time_step, :], u), u)))
-                           tf.reduce_mean(self.free_energy(value_v_sampled, u)))
+                           tf.reduce_mean(self.free_energy(v_sampled, u)))
             self.losses += self.get_loss(vectorized_input[:, time_step, :], u)
 
         # build the training of the model and generating of the model
@@ -214,7 +214,7 @@ class LSTM_RBM(object):
         with tf.variable_scope('lstm'):
             for time_step in xrange(len_outputs):
                 tf.get_variable_scope().reuse_variables()
-                inputs = self.mean_v(inputs, hidden_state)
+                inputs = self.gibbs_sample_v(inputs, hidden_state)
                 (hidden_state, cell_state) = self.lstm.feedforward(inputs,
                                                                    hidden_state,
                                                                    cell_state)
@@ -365,8 +365,8 @@ class Config():
     n_hidden = 500
     n_lstm_hidden = 200
 
-    new_data = True
-    train = True
+    new_data = False
+    train = False
 
     generate = True
 
@@ -425,13 +425,12 @@ if __name__ == '__main__':
 
         print (usual_prompt + 'information of needed data has been loaded.')
 
-    with tf.device('/cpu:0'):
         model = LSTM_RBM(config)
 
     outputs_pitches = []
     outputs_notes = []
     # create a session to run the computation graph
-    with tf.Session() as sess, tf.device('/cpu:0'):
+    with tf.Session() as sess:
         if config.new_data:
             sess.run(tf.initialize_all_variables())
             print (usual_prompt + 'Variables have been initialized.')
@@ -475,8 +474,7 @@ if __name__ == '__main__':
                 temp = sess.run(model.generate)
                 temp_pitch = temp[0]
                 temp_note = temp[1]
-                #print (p_pitch.shape, config.n_visible_pitches)
-                #print (p_note.shape, config.n_visible_notes)
+                print (temp_pitch, temp_note)
                 sum_pitch = float(np.sum(temp_pitch, axis=1))
                 sum_note = float(np.sum(temp_note, axis=1))
                 p_pitch = temp_pitch.reshape(
