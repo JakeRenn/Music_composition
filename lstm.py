@@ -54,10 +54,10 @@ class LSTM(object):
                                                    self.n_input,
                                                    self.n_hidden)
 
-        self.params = [self.i_w, self.i_u, self.i_b,
-                       self.f_w, self.f_u, self.f_b,
-                       self.o_w, self.o_u, self.o_b,
-                       self.c_w, self.c_u, self.c_b]
+        #self.params = [self.i_w, self.i_u, self.i_b,
+                       #self.f_w, self.f_u, self.f_b,
+                       #self.o_w, self.o_u, self.o_b,
+                       #self.c_w, self.c_u, self.c_b]
 
     def feedforward(self, inputs, pre_hidden, pre_cell,
                     gate_activation=tf.sigmoid,
