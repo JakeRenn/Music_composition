@@ -157,9 +157,10 @@ class LSTM_RBM(object):
         self.losses = 0
         for time_step in xrange(self.num_steps):
             u = self.lstm_outputs[time_step]
+            v_sampled = self.gibbs_sample_v(vectorized_input[:, time_step, :], u)
             self.costs += (tf.reduce_mean(self.free_energy(vectorized_input[:, time_step, :], u)) -
                            #tf.reduce_mean(self.free_energy(self.mean_v(vectorized_input[:, time_step, :], u), u)))
-                           tf.reduce_mean(self.free_energy(self.k_steps_gibbs_v(vectorized_input[:, time_step, :], u, self.gibbs_steps), u)))
+                           tf.reduce_mean(self.free_energy(value_v_sampled, u)))
             self.losses += self.get_loss(vectorized_input[:, time_step, :], u)
 
         # build the training of the model and generating of the model
@@ -204,8 +205,8 @@ class LSTM_RBM(object):
 
         np_pitches = np.zeros([self.batch_size, self.n_visible_pitches], dtype = 'float32')
         np_notes = np.zeros([self.batch_size, self.n_visible_notes], dtype = 'float32')
-        np_pitches[:, 29] = 1
-        np_notes[:, 1] = 1
+        #np_pitches[:, 29] = 1
+        #np_notes[:, 1] = 1
         np_inputs = np.concatenate((np_pitches, np_notes), axis = 1)
         inputs = tf.constant(np_inputs, dtype = tf.float32, shape = [self.batch_size, self.n_visible])
         hidden_state = self.init_hidden_state
@@ -273,16 +274,21 @@ class LSTM_RBM(object):
             temp = self.gibbs_vhv(temp, u)
         return temp
 
+    def gibbs_sample_v(self, v, u):
+        temp = v
+        for i in xrange(self.gibbs_steps):
+            temp = self.gibbs_vhv(temp, u)
+        return temp
+
     def mean_v(self, v, u):
         'run self.gibbs_steps of gibbs_vhv, then sample sampled_h given v and compute the distribution of v_final given sampled_h'
-        temp = self.k_steps_gibbs_v(v, u, self.gibbs_steps - 1)
+        temp = self.gibbs_sample_v(v, u)
         temp = self.sample_h_given_v(temp, u)
         return self.prop_down(temp, u)
 
     def free_energy(self, inputs, u):
         'this is used to evaluation the stability of the model'
-        temp = tf.matmul(inputs, self.w_vh) + self.b_h + \
-            tf.matmul(u, self.w_uh)
+        temp = tf.matmul(inputs, self.w_vh) + self.b_h + tf.matmul(u, self.w_uh)
         b_v_term = tf.matmul(inputs,
                              (self.b_v + tf.matmul(u, self.w_uv)),
                              transpose_b=True)
@@ -359,8 +365,8 @@ class Config():
     n_hidden = 500
     n_lstm_hidden = 200
 
-    new_data = False
-    train = False
+    new_data = True
+    train = True
 
     generate = True
 
